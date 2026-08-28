@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111111">
+
+  <title>Champions Event Check-In</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #111;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 25px 18px 40px;
+      text-align: center;
+    }
+
+    .brand {
+      margin-bottom: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #aaa;
+    }
+
+    h1 {
+      margin: 5px 0 8px;
+      font-size: 30px;
+    }
+
+    .subtitle {
+      color: #bbb;
+      line-height: 1.5;
+      margin-bottom: 25px;
+    }
+
+    #reader {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 14px;
+      background: #222;
+      margin: 20px 0;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 17px 20px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    #startButton,
+    #nextButton {
+      background: #fff;
+      color: #111;
+    }
+
+    .status {
+      display: none;
+      padding: 28px 20px;
+      margin-top: 20px;
+      border-radius: 14px;
+    }
+
+    .status-icon {
+      font-size: 50px;
+      margin-bottom: 10px;
+    }
+
+    .success {
+      background: #123d23;
+      border: 2px solid #2e9e55;
+    }
+
+    .error {
+      background: #471818;
+      border: 2px solid #c84545;
+    }
+
+    .processing {
+      background: #292929;
+      border: 2px solid #555;
+    }
+
+    .status h2 {
+      margin: 5px 0 10px;
+    }
+
+    .status p {
+      margin: 0;
+      color: #ddd;
+      line-height: 1.5;
+    }
+
+    .footer {
+      margin-top: 35px;
+      color: #777;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="brand">Champions UK plc</div>
+
+  <h1>Event Check-In</h1>
+
+  <p class="subtitle">
+    Scan the attendee's personal QR code to record their attendance.
+  </p>
+
+  <button id="startButton" onclick="startScanner()">
+    START SCANNER
+  </button>
+
+  <div id="reader"></div>
+
+  <div id="processing" class="status processing">
+    <div class="status-icon">...</div>
+    <h2>Checking In</h2>
+    <p>Please wait while attendance is recorded.</p>
+  </div>
+
+  <div id="success" class="status success">
+    <div class="status-icon">✓</div>
+    <h2>CHECK-IN SUCCESSFUL</h2>
+    <p>Attendance has been sent to the Champions check-in system.</p>
+
+    <button id="nextButton" onclick="resetScanner()">
+      SCAN NEXT ATTENDEE
+    </button>
+  </div>
+
+  <div id="error" class="status error">
+    <div class="status-icon">!</div>
+    <h2>CHECK-IN FAILED</h2>
+    <p id="errorMessage">
+      This QR code could not be processed.
+    </p>
+
+    <button onclick="resetScanner()">
+      TRY AGAIN
+    </button>
+  </div>
+
+  <div class="footer">
+    Champions UK plc Event Check-In System
+  </div>
+
+</div>
+
+<script>
+
+  let html5QrCode;
+  let scanning = false;
+  let lastScannedCode = "";
+  let lastScanTime = 0;
+
+  function hideStatuses() {
+    document.getElementById("processing").style.display = "none";
+    document.getElementById("success").style.display = "none";
+    document.getElementById("error").style.display = "none";
+  }
+
+  async function startScanner() {
+
+    hideStatuses();
+
+    document.getElementById("startButton").style.display = "none";
+
+    html5QrCode = new Html5Qrcode("reader");
+
+    try {
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        onScanSuccess
+      );
+
+      scanning = true;
+
+    } catch (err) {
+
+      showError(
+        "The camera could not be opened. Please allow camera access and try again."
+      );
+
+    }
+  }
+
+  async function onScanSuccess(decodedText) {
+
+    if (!scanning) return;
+
+    const now = Date.now();
+
+    if (
+      decodedText === lastScannedCode &&
+      now - lastScanTime < 10000
+    ) {
+      return;
+    }
+
+    lastScannedCode = decodedText;
+    lastScanTime = now;
+    scanning = false;
+
+    try {
+      await html5QrCode.stop();
+    } catch (e) {}
+
+    document.getElementById("reader").innerHTML = "";
+
+    /* Only accept our Zapier check-in URLs */
+
+    let checkinUrl;
+
+    try {
+
+      checkinUrl = new URL(decodedText);
+
+      if (
+        checkinUrl.protocol !== "https:" ||
+        checkinUrl.hostname !== "hooks.zapier.com" ||
+        !checkinUrl.pathname.startsWith("/hooks/catch/") ||
+        !checkinUrl.searchParams.get("email") ||
+        !checkinUrl.searchParams.get("event")
+      ) {
+        throw new Error("Invalid Champions QR code");
+      }
+
+    } catch (err) {
+
+      showError(
+        "This does not appear to be a valid Champions event QR code."
+      );
+
+      return;
+    }
+
+    document.getElementById("processing").style.display = "block";
+
+    try {
+
+      /*
+       * no-cors is intentional.
+       *
+       * The Zapier Catch Hook receives the request.
+       * Browsers cannot inspect the response unless the
+       * remote server permits cross-origin access.
+       */
+
+      await fetch(checkinUrl.toString(), {
+        method: "GET",
+        mode: "no-cors"
+      });
+
+      document.getElementById("processing").style.display = "none";
+      document.getElementById("success").style.display = "block";
+
+    } catch (err) {
+
+      document.getElementById("processing").style.display = "none";
+
+      showError(
+        "The check-in request could not be sent. Check the internet connection and try again."
+      );
+
+    }
+  }
+
+  function showError(message) {
+
+    document.getElementById("processing").style.display = "none";
+
+    document.getElementById("errorMessage").textContent = message;
+    document.getElementById("error").style.display = "block";
+  }
+
+  async function resetScanner() {
+
+    hideStatuses();
+
+    lastScannedCode = "";
+    lastScanTime = 0;
+
+    document.getElementById("reader").innerHTML = "";
+    document.getElementById("startButton").style.display = "block";
+
+    scanning = false;
+  }
+
+</script>
+
+</body>
+</html>
