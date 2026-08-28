@@ -1,0 +1,22 @@
+{
+  "name": "Champions Check-In",
+  "short_name": "Check-In",
+  "start_url": "/Event-QR-Scanner/",
+  "scope": "/Event-QR-Scanner/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "description": "Champions UK plc event attendee QR check-in scanner",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
